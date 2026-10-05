@@ -169,6 +169,180 @@
       initCamera();
     });
 
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta name="robots" content="noindex, nofollow">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Photo Booth - Laurea Nicola</title>
+  <style>
+    #capture-ui {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #111;
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      overflow: hidden;
+    }
+    #camera-container {
+      position: relative;
+      width: 90vw;
+      max-width: 420px;
+      aspect-ratio: 3 / 4;
+      border-radius: 16px;
+      overflow: hidden;
+      background: #000;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    }
+    video {
+      position: absolute;
+      top: 4%;
+      left: 12%;
+      width: 76%;
+      height: 60%;
+      object-fit: cover;
+    }
+    video.mirror {
+      transform: scaleX(-1);
+      -webkit-transform: scaleX(-1);
+    }
+    #frame-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      object-fit: fill;
+    }
+    #controls {
+      margin-top: 15px;
+      display: flex;
+      gap: 15px;
+      align-items: center;
+    }
+    .btn {
+      background: #d32f2f;
+      color: #fff;
+      border: none;
+      padding: 12px 22px;
+      font-size: 15px;
+      font-weight: bold;
+      border-radius: 30px;
+      cursor: pointer;
+    }
+    .btn-secondary {
+      background: #333;
+    }
+    #result-container {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+    #photo-result {
+      width: 85vw;
+      max-width: 400px;
+      border-radius: 12px;
+    }
+    canvas { display: none; }
+  </style>
+</head>
+<body>
+
+  <div id="capture-ui">
+    <div id="camera-container">
+      <!-- Aggiunti autoplay, playsinline e muted per sbloccare Safari/iOS e Android -->
+      <video id="video" class="mirror" autoplay playsinline muted></video>
+      <img id="frame-overlay" src="cornice.png" alt="Cornice Fiat 500">
+    </div>
+    <div id="controls">
+      <button class="btn btn-secondary" id="switch-btn">🔄 Gira Cam</button>
+      <button class="btn" id="snap-btn">📸 Scatta</button>
+    </div>
+  </div>
+
+  <div id="result-container">
+    <img id="photo-result" alt="Foto scattata">
+    <div style="display:flex; flex-direction:column; gap:8px; width: 85vw; max-width: 400px;">
+      <a id="download-link" class="btn" style="text-align:center; text-decoration:none; background:#2e7d32;" download="laurea_nicola.jpg">💾 Salva Foto</a>
+      <a href="https://photos.app.goo.gl/INSERISCI_QUI_IL_TUO_LINK" id="album-link" target="_blank" class="btn btn-secondary" style="text-align:center; text-decoration:none;">🚀 Carica sull'Album della TV</a>
+      <button class="btn btn-secondary" id="retake-btn">Scatta un'altra</button>
+    </div>
+  </div>
+
+  <canvas id="canvas"></canvas>
+
+  <script>
+    const video = document.getElementById('video');
+    const frame = document.getElementById('frame-overlay');
+    const canvas = document.getElementById('canvas');
+    const snapBtn = document.getElementById('snap-btn');
+    const switchBtn = document.getElementById('switch-btn');
+    const retakeBtn = document.getElementById('retake-btn');
+    const captureUI = document.getElementById('capture-ui');
+    const resultContainer = document.getElementById('result-container');
+    const photoResult = document.getElementById('photo-result');
+    const downloadLink = document.getElementById('download-link');
+
+    let currentFacingMode = "user";
+    let currentStream = null;
+
+    async function initCamera() {
+      if (currentStream) {
+        currentStream.getTracks().forEach(track => track.stop());
+      }
+
+      // Impostiamo la classe mirror prima dell'avvio
+      if (currentFacingMode === "user") {
+        video.classList.add("mirror");
+      } else {
+        video.classList.remove("mirror");
+      }
+
+      const constraints = {
+        audio: false,
+        video: {
+          facingMode: { ideal: currentFacingMode },
+          width: { ideal: 1280 },
+          height: { ideal: 960 }
+        }
+      };
+
+      try {
+        currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+        video.srcObject = currentStream;
+        await video.play();
+      } catch (err) {
+        // Fallback resiliente senza vincoli di risoluzione se la camera frontale rifiuta le dimensioni
+        try {
+          currentStream = await navigator.mediaDevices.getUserMedia({
+            audio: false,
+            video: { facingMode: currentFacingMode }
+          });
+          video.srcObject = currentStream;
+          await video.play();
+        } catch (fallbackErr) {
+          alert("Errore nell'avvio della fotocamera. Verifica i permessi del browser.");
+        }
+      }
+    }
+
+    switchBtn.addEventListener('click', () => {
+      currentFacingMode = currentFacingMode === "user" ? "environment" : "user";
+      initCamera();
+    });
+
     snapBtn.addEventListener('click', () => {
       const targetW = frame.naturalWidth || 1080;
       const targetH = frame.naturalHeight || 1440;
@@ -218,6 +392,11 @@
       resultContainer.style.display = "none";
       captureUI.style.display = "block";
     });
+
+    initCamera();
+  </script>
+</body>
+</html>
 
     initCamera();
   </script>
