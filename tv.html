@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <title>Slideshow TV - Laurea Nicola</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #000;
+      color: #fff;
+      font-family: sans-serif;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    #slide {
+      max-width: 95vw;
+      max-height: 95vh;
+      object-fit: contain;
+      border-radius: 12px;
+      box-shadow: 0 0 50px rgba(255,255,255,0.1);
+      transition: opacity 0.8s ease-in-out;
+      opacity: 0;
+    }
+    #placeholder {
+      font-size: 28px;
+      color: #777;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="placeholder">In attesa del primo scatto... 🚗💨</div>
+  <img id="slide" alt="Foto Live">
+
+  <script>
+    const CLOUD_NAME = "jyu2ze15";
+    const TAG = "laurea_nicola";
+
+    const slideImg = document.getElementById('slide');
+    const placeholder = document.getElementById('placeholder');
+    let photos = [];
+    let currentIndex = 0;
+
+    async function fetchPhotos() {
+      try {
+        // Recupera la lista delle immagini tramite il feed JSON pubblico del tag
+        const res = await fetch(`https://res.cloudinary.com/${CLOUD_NAME}/image/list/${TAG}.json?cb=${Date.now()}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.resources && data.resources.length > 0) {
+            photos = data.resources.map(r => `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/v${r.version}/${r.public_id}.${r.format}`);
+          }
+        }
+      } catch (e) {
+        // Attende silenziosamente finché non viene caricata la prima foto
+      }
+    }
+
+    function showNext() {
+      if (photos.length === 0) return;
+      placeholder.style.display = "none";
+
+      slideImg.style.opacity = 0;
+      setTimeout(() => {
+        slideImg.src = photos[currentIndex];
+        slideImg.onload = () => {
+          slideImg.style.opacity = 1;
+        };
+        currentIndex = (currentIndex + 1) % photos.length;
+      }, 800);
+    }
+
+    // Controlla nuovi scatti ogni 8 secondi
+    setInterval(fetchPhotos, 8000);
+    // Cambia diapositiva ogni 5 secondi
+    setInterval(showNext, 5000);
+
+    fetchPhotos().then(() => showNext());
+  </script>
+</body>
+</html>
