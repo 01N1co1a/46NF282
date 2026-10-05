@@ -33,6 +33,11 @@
       height: 100%;
       object-fit: cover;
     }
+    /* Classe per specchiare il video in tempo reale nei selfie */
+    video.mirror {
+      transform: scaleX(-1);
+      -webkit-transform: scaleX(-1);
+    }
     #frame-overlay {
       position: absolute;
       top: 0;
@@ -79,7 +84,7 @@
 
   <div id="capture-ui">
     <div id="camera-container">
-      <video id="video" autoplay playsinline></video>
+      <video id="video" class="mirror" autoplay playsinline></video>
       <img id="frame-overlay" src="cornice.png" alt="Cornice Fiat 500">
     </div>
     <div id="controls">
@@ -119,18 +124,24 @@
         stream.getTracks().forEach(track => track.stop());
       }
       try {
-        // Chiediamo l'apertura grandangolare nativa del sensore senza forzare ritagli digitali stretti
         stream = await navigator.mediaDevices.getUserMedia({
           video: { 
             facingMode: currentFacingMode,
-            width: { ideal: 1920 },
-            height: { ideal: 1080 }
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
           },
           audio: false
         });
         video.srcObject = stream;
+        
+        // Specchia o meno la videocamera live
+        if (currentFacingMode === "user") {
+          video.classList.add("mirror");
+        } else {
+          video.classList.remove("mirror");
+        }
       } catch (err) {
-        alert("Consenti l'accesso alla fotocamera per salire a bordo della 500!");
+        alert("Consenti l'accesso alla fotocamera per continuare.");
       }
     }
 
@@ -140,47 +151,45 @@
     });
 
     snapBtn.addEventListener('click', () => {
-      // 1. Proporzioni e risoluzione bloccate su quelle native della cornice
-      const targetWidth = frame.naturalWidth || 1080;
-      const targetHeight = frame.naturalHeight || 1440;
+      // Dimensioni fisse della cornice PNG originale (senza distorsioni)
+      const targetW = frame.naturalWidth || 1080;
+      const targetH = frame.naturalHeight || 1440;
 
-      canvas.width = targetWidth;
-      canvas.height = targetHeight;
+      canvas.width = targetW;
+      canvas.height = targetH;
       const ctx = canvas.getContext('2d');
 
-      // 2. Calcolo del ritaglio per mantenere l'aspect-ratio senza deformazioni
-      const vWidth = video.videoWidth;
-      const vHeight = video.videoHeight;
-      const targetRatio = targetWidth / targetHeight;
-      const videoRatio = vWidth / vHeight;
+      const vW = video.videoWidth;
+      const vH = video.videoHeight;
+      const targetRatio = targetW / targetH;
+      const videoRatio = vW / vH;
 
-      let sWidth, sHeight, sx, sy;
+      let sW, sH, sx, sy;
 
       if (videoRatio > targetRatio) {
-        sHeight = vHeight;
-        sWidth = vHeight * targetRatio;
-        sx = (vWidth - sWidth) / 2;
+        sH = vH;
+        sW = vH * targetRatio;
+        sx = (vW - sW) / 2;
         sy = 0;
       } else {
-        sWidth = vWidth;
-        sHeight = vWidth / targetRatio;
+        sW = vW;
+        sH = vW / targetRatio;
         sx = 0;
-        sy = (vHeight - sHeight) / 2;
+        sy = (vH - sH) / 2;
       }
 
-      // 3. Disegno del video (specchiato se selfie)
       ctx.save();
+      // Se selfie frontale, specchia anche la foto renderizzata
       if (currentFacingMode === "user") {
-        ctx.translate(targetWidth, 0);
+        ctx.translate(targetW, 0);
         ctx.scale(-1, 1);
       }
-      ctx.drawImage(video, sx, sy, sWidth, sHeight, 0, 0, targetWidth, targetHeight);
+      ctx.drawImage(video, sx, sy, sW, sH, 0, 0, targetW, targetH);
       ctx.restore();
 
-      // 4. Disegno della cornice perfettamente allineata
-      ctx.drawImage(frame, 0, 0, targetWidth, targetHeight);
+      // Disegna la cornice Fiat 500 esattamente alle sue dimensioni proporzionate
+      ctx.drawImage(frame, 0, 0, targetW, targetH);
 
-      // 5. Output finale
       const dataURL = canvas.toDataURL('image/jpeg', 0.95);
       photoResult.src = dataURL;
       downloadLink.href = dataURL;
