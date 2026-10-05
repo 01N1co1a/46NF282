@@ -22,7 +22,7 @@
       object-fit: contain;
       border-radius: 14px;
       box-shadow: 0 0 60px rgba(255,255,255,0.12);
-      transition: opacity 0.6s ease-in-out;
+      transition: opacity 0.5s ease-in-out;
       opacity: 0;
     }
     #placeholder {
@@ -30,24 +30,24 @@
       color: #777;
       text-align: center;
     }
-    /* Piccolo badge opzionale quando entra una foto appena scattata */
     #new-badge {
       position: absolute;
       top: 30px;
       right: 30px;
       background: #d32f2f;
       color: white;
-      padding: 10px 20px;
+      padding: 12px 24px;
       border-radius: 30px;
       font-weight: bold;
-      font-size: 18px;
-      box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+      font-size: 20px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.6);
       display: none;
-      animation: pulse 1.5s infinite;
+      z-index: 10;
+      animation: pulse 1.2s infinite;
     }
     @keyframes pulse {
       0% { transform: scale(1); }
-      50% { transform: scale(1.06); }
+      50% { transform: scale(1.08); }
       100% { transform: scale(1); }
     }
   </style>
@@ -61,74 +61,83 @@
   <script>
     const CLOUD_NAME = "jyu2ze15";
     const TAG = "laurea_nicola";
+    const REALTIME_TOPIC = "booth-live-8f4b29c1e07d3a";
 
     const slideImg = document.getElementById('slide');
     const placeholder = document.getElementById('placeholder');
     const newBadge = document.getElementById('new-badge');
 
     let photos = [];
-    let knownIds = new Set();
     let currentIndex = 0;
     let isShowingNewPhoto = false;
 
-    async function fetchPhotos() {
+    // Ricezione istantanea via WebSocket/SSE
+    function setupRealtimeListener() {
+      const eventSource = new EventSource(`https://ntfy.sh/${REALTIME_TOPIC}/sse`);
+      
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.event === "message" && data.message && data.message.startsWith("http")) {
+            const incomingPhotoUrl = data.message;
+            if (!photos.includes(incomingPhotoUrl)) {
+              photos.unshift(incomingPhotoUrl);
+            }
+            showImmediate(incomingPhotoUrl);
+          }
+        } catch(e) {
+          console.error(e);
+        }
+      };
+
+      eventSource.onerror = () => {
+        setTimeout(setupRealtimeListener, 5000);
+      };
+    }
+
+    // Caricamento storico per lo slideshow generale di sottofondo
+    async function fetchArchivePhotos() {
       try {
-        // Query param casuale per abbattere la cache della CDN Cloudinary
-        const url = `https://res.cloudinary.com/${CLOUD_NAME}/image/list/${TAG}.json?nocache=${Date.now()}`;
-        const res = await fetch(url, { cache: "no-store" });
-        
+        const url = `https://res.cloudinary.com/${CLOUD_NAME}/image/list/${TAG}.json?ts=${Date.now()}`;
+        const res = await fetch(url);
         if (res.ok) {
           const data = await res.json();
           if (data.resources && data.resources.length > 0) {
-            // Ordina dall'ultima creata alla più vecchia
             data.resources.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-
-            const freshUrls = data.resources.map(r => ({
-              id: r.public_id,
-              url: `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/q_auto,f_auto/v${r.version}/${r.public_id}.${r.format}`
-            }));
-
-            // Controlla se è appena arrivata una foto nuova
-            if (knownIds.size > 0) {
-              const brandNew = freshUrls.find(p => !knownIds.has(p.id));
-              if (brandNew) {
-                // Interrompe la rotazione e mostra SUBITO la nuova foto!
-                showImmediate(brandNew.url);
-              }
-            }
-
-            // Aggiorna registro foto conosciute
-            photos = freshUrls.map(p => p.url);
-            freshUrls.forEach(p => knownIds.add(p.id));
+            const loaded = data.resources.map(r => 
+              `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/q_auto,f_auto/v${r.version}/${r.public_id}.${r.format}`
+            );
+            
+            loaded.forEach(u => {
+              if (!photos.includes(u)) photos.push(u);
+            });
 
             if (slideImg.style.opacity == 0 && photos.length > 0 && !isShowingNewPhoto) {
               showNext();
             }
           }
         }
-      } catch (e) {
-        // Rete o file non ancora disponibile
-      }
+      } catch (e) {}
     }
 
-    function showImmediate(newPhotoUrl) {
+    function showImmediate(url) {
       isShowingNewPhoto = true;
       newBadge.style.display = "block";
       slideImg.style.opacity = 0;
 
       setTimeout(() => {
         placeholder.style.display = "none";
-        slideImg.src = newPhotoUrl;
+        slideImg.src = url;
         slideImg.onload = () => {
           slideImg.style.opacity = 1;
         };
 
-        // Rimane in evidenza per 7 secondi, poi torna alla rotazione normale
+        // Tiene a schermo il nuovo arrivato per 8 secondi
         setTimeout(() => {
           newBadge.style.display = "none";
           isShowingNewPhoto = false;
-        }, 7000);
-      }, 500);
+        }, 8000);
+      }, 400);
     }
 
     function showNext() {
@@ -142,16 +151,13 @@
           slideImg.style.opacity = 1;
         };
         currentIndex = (currentIndex + 1) % photos.length;
-      }, 600);
+      }, 500);
     }
 
-    // Controlla i nuovi scatti ogni 3 secondi
-    setInterval(fetchPhotos, 3000);
-
-    // Cambia diapositiva ogni 5 secondi durante il normale slideshow
-    setInterval(showNext, 5000);
-
-    fetchPhotos();
+    setupRealtimeListener();
+    fetchArchivePhotos();
+    setInterval(fetchArchivePhotos, 30000);
+    setInterval(showNext, 6000);
   </script>
 </body>
 </html>
