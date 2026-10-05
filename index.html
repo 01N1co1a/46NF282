@@ -33,7 +33,6 @@
       height: 100%;
       object-fit: cover;
     }
-    /* Classe per specchiare il video in tempo reale nei selfie */
     video.mirror {
       transform: scaleX(-1);
       -webkit-transform: scaleX(-1);
@@ -84,7 +83,8 @@
 
   <div id="capture-ui">
     <div id="camera-container">
-      <video id="video" class="mirror" autoplay playsinline></video>
+      <!-- Aggiunti autoplay, playsinline e muted per sbloccare Safari/iOS e Android -->
+      <video id="video" class="mirror" autoplay playsinline muted></video>
       <img id="frame-overlay" src="cornice.png" alt="Cornice Fiat 500">
     </div>
     <div id="controls">
@@ -117,31 +117,45 @@
     const downloadLink = document.getElementById('download-link');
 
     let currentFacingMode = "user";
-    let stream = null;
+    let currentStream = null;
 
     async function initCamera() {
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
+      if (currentStream) {
+        currentStream.getTracks().forEach(track => track.stop());
       }
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { 
-            facingMode: currentFacingMode,
-            width: { ideal: 1280 },
-            height: { ideal: 720 }
-          },
-          audio: false
-        });
-        video.srcObject = stream;
-        
-        // Specchia o meno la videocamera live
-        if (currentFacingMode === "user") {
-          video.classList.add("mirror");
-        } else {
-          video.classList.remove("mirror");
+
+      // Impostiamo la classe mirror prima dell'avvio
+      if (currentFacingMode === "user") {
+        video.classList.add("mirror");
+      } else {
+        video.classList.remove("mirror");
+      }
+
+      const constraints = {
+        audio: false,
+        video: {
+          facingMode: { ideal: currentFacingMode },
+          width: { ideal: 1280 },
+          height: { ideal: 960 }
         }
+      };
+
+      try {
+        currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+        video.srcObject = currentStream;
+        await video.play();
       } catch (err) {
-        alert("Consenti l'accesso alla fotocamera per continuare.");
+        // Fallback resiliente senza vincoli di risoluzione se la camera frontale rifiuta le dimensioni
+        try {
+          currentStream = await navigator.mediaDevices.getUserMedia({
+            audio: false,
+            video: { facingMode: currentFacingMode }
+          });
+          video.srcObject = currentStream;
+          await video.play();
+        } catch (fallbackErr) {
+          alert("Errore nell'avvio della fotocamera. Verifica i permessi del browser.");
+        }
       }
     }
 
@@ -151,7 +165,6 @@
     });
 
     snapBtn.addEventListener('click', () => {
-      // Dimensioni fisse della cornice PNG originale (senza distorsioni)
       const targetW = frame.naturalWidth || 1080;
       const targetH = frame.naturalHeight || 1440;
 
@@ -159,8 +172,8 @@
       canvas.height = targetH;
       const ctx = canvas.getContext('2d');
 
-      const vW = video.videoWidth;
-      const vH = video.videoHeight;
+      const vW = video.videoWidth || targetW;
+      const vH = video.videoHeight || targetH;
       const targetRatio = targetW / targetH;
       const videoRatio = vW / vH;
 
@@ -179,15 +192,13 @@
       }
 
       ctx.save();
-      // Se selfie frontale, specchia anche la foto renderizzata
       if (currentFacingMode === "user") {
         ctx.translate(targetW, 0);
         ctx.scale(-1, 1);
       }
-      ctx.drawImage(video, sx, sy, sW, sH, 0, 0, targetW, targetH);
+      ctx.drawImage(video, sx, sy, sWidth = sW, sHeight = sH, 0, 0, targetW, targetH);
       ctx.restore();
 
-      // Disegna la cornice Fiat 500 esattamente alle sue dimensioni proporzionate
       ctx.drawImage(frame, 0, 0, targetW, targetH);
 
       const dataURL = canvas.toDataURL('image/jpeg', 0.95);
