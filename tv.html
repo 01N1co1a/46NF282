@@ -8,7 +8,7 @@
     body {
       background: #000;
       color: #fff;
-      font-family: sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       width: 100vw;
       height: 100vh;
       overflow: hidden;
@@ -20,21 +20,42 @@
       max-width: 95vw;
       max-height: 95vh;
       object-fit: contain;
-      border-radius: 12px;
-      box-shadow: 0 0 50px rgba(255,255,255,0.1);
-      transition: opacity 0.8s ease-in-out;
+      border-radius: 14px;
+      box-shadow: 0 0 60px rgba(255,255,255,0.12);
+      transition: opacity 0.6s ease-in-out;
       opacity: 0;
     }
     #placeholder {
-      font-size: 28px;
+      font-size: 26px;
       color: #777;
       text-align: center;
+    }
+    /* Piccolo badge opzionale quando entra una foto appena scattata */
+    #new-badge {
+      position: absolute;
+      top: 30px;
+      right: 30px;
+      background: #d32f2f;
+      color: white;
+      padding: 10px 20px;
+      border-radius: 30px;
+      font-weight: bold;
+      font-size: 18px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+      display: none;
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.06); }
+      100% { transform: scale(1); }
     }
   </style>
 </head>
 <body>
 
-  <div id="placeholder">In attesa del primo scatto... 🚗💨</div>
+  <div id="new-badge">✨ Nuovo Scatto!</div>
+  <div id="placeholder">In attesa del primo scatto sulla 500... 🚗💨</div>
   <img id="slide" alt="Foto Live">
 
   <script>
@@ -43,26 +64,75 @@
 
     const slideImg = document.getElementById('slide');
     const placeholder = document.getElementById('placeholder');
+    const newBadge = document.getElementById('new-badge');
+
     let photos = [];
+    let knownIds = new Set();
     let currentIndex = 0;
+    let isShowingNewPhoto = false;
 
     async function fetchPhotos() {
       try {
-        // Recupera la lista delle immagini tramite il feed JSON pubblico del tag
-        const res = await fetch(`https://res.cloudinary.com/${CLOUD_NAME}/image/list/${TAG}.json?cb=${Date.now()}`);
+        // Query param casuale per abbattere la cache della CDN Cloudinary
+        const url = `https://res.cloudinary.com/${CLOUD_NAME}/image/list/${TAG}.json?nocache=${Date.now()}`;
+        const res = await fetch(url, { cache: "no-store" });
+        
         if (res.ok) {
           const data = await res.json();
           if (data.resources && data.resources.length > 0) {
-            photos = data.resources.map(r => `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/v${r.version}/${r.public_id}.${r.format}`);
+            // Ordina dall'ultima creata alla più vecchia
+            data.resources.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+            const freshUrls = data.resources.map(r => ({
+              id: r.public_id,
+              url: `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/q_auto,f_auto/v${r.version}/${r.public_id}.${r.format}`
+            }));
+
+            // Controlla se è appena arrivata una foto nuova
+            if (knownIds.size > 0) {
+              const brandNew = freshUrls.find(p => !knownIds.has(p.id));
+              if (brandNew) {
+                // Interrompe la rotazione e mostra SUBITO la nuova foto!
+                showImmediate(brandNew.url);
+              }
+            }
+
+            // Aggiorna registro foto conosciute
+            photos = freshUrls.map(p => p.url);
+            freshUrls.forEach(p => knownIds.add(p.id));
+
+            if (slideImg.style.opacity == 0 && photos.length > 0 && !isShowingNewPhoto) {
+              showNext();
+            }
           }
         }
       } catch (e) {
-        // Attende silenziosamente finché non viene caricata la prima foto
+        // Rete o file non ancora disponibile
       }
     }
 
+    function showImmediate(newPhotoUrl) {
+      isShowingNewPhoto = true;
+      newBadge.style.display = "block";
+      slideImg.style.opacity = 0;
+
+      setTimeout(() => {
+        placeholder.style.display = "none";
+        slideImg.src = newPhotoUrl;
+        slideImg.onload = () => {
+          slideImg.style.opacity = 1;
+        };
+
+        // Rimane in evidenza per 7 secondi, poi torna alla rotazione normale
+        setTimeout(() => {
+          newBadge.style.display = "none";
+          isShowingNewPhoto = false;
+        }, 7000);
+      }, 500);
+    }
+
     function showNext() {
-      if (photos.length === 0) return;
+      if (photos.length === 0 || isShowingNewPhoto) return;
       placeholder.style.display = "none";
 
       slideImg.style.opacity = 0;
@@ -72,15 +142,16 @@
           slideImg.style.opacity = 1;
         };
         currentIndex = (currentIndex + 1) % photos.length;
-      }, 800);
+      }, 600);
     }
 
-    // Controlla nuovi scatti ogni 8 secondi
-    setInterval(fetchPhotos, 8000);
-    // Cambia diapositiva ogni 5 secondi
+    // Controlla i nuovi scatti ogni 3 secondi
+    setInterval(fetchPhotos, 3000);
+
+    // Cambia diapositiva ogni 5 secondi durante il normale slideshow
     setInterval(showNext, 5000);
 
-    fetchPhotos().then(() => showNext());
+    fetchPhotos();
   </script>
 </body>
 </html>
