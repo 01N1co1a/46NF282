@@ -33,7 +33,6 @@
       background: #000;
       box-shadow: 0 10px 30px rgba(0,0,0,0.5);
     }
-    /* Il video in anteprima occupa solo il rettangolo del parabrezza */
     video {
       position: absolute;
       top: 4%;
@@ -72,10 +71,12 @@
       font-weight: bold;
       border-radius: 30px;
       cursor: pointer;
+      text-align: center;
+      text-decoration: none;
     }
-    .btn-secondary {
-      background: #333;
-    }
+    .btn-secondary { background: #333; }
+    .btn-cloud { background: #0070f3; }
+    .btn-success { background: #2e7d32; }
     #result-container {
       display: none;
       flex-direction: column;
@@ -86,6 +87,12 @@
       width: 85vw;
       max-width: 400px;
       border-radius: 12px;
+    }
+    #status-msg {
+      font-size: 14px;
+      text-align: center;
+      min-height: 20px;
+      color: #aaa;
     }
     canvas { display: none; }
   </style>
@@ -105,9 +112,10 @@
 
   <div id="result-container">
     <img id="photo-result" alt="Foto scattata">
+    <div id="status-msg"></div>
     <div style="display:flex; flex-direction:column; gap:8px; width: 85vw; max-width: 400px;">
-      <a id="download-link" class="btn" style="text-align:center; text-decoration:none; background:#2e7d32;" download="laurea_nicola.jpg">💾 Salva Foto</a>
-      <a href="https://photos.app.goo.gl/VXuc3yNSZH1FG9KM7" id="album-link" target="_blank" class="btn btn-secondary" style="text-align:center; text-decoration:none;">🚀 Carica sull'Album della TV</a>
+      <button id="upload-btn" class="btn btn-cloud">🚀 Invia alla TV</button>
+      <a id="download-link" class="btn btn-success" download="laurea_nicola.jpg">💾 Salva nel rullino</a>
       <button class="btn btn-secondary" id="retake-btn">Scatta un'altra</button>
     </div>
   </div>
@@ -115,6 +123,9 @@
   <canvas id="canvas"></canvas>
 
   <script>
+    const CLOUD_NAME = "jyu2ze15";
+    const UPLOAD_PRESET = "laurea_booth";
+
     const video = document.getElementById('video');
     const frame = document.getElementById('frame-overlay');
     const canvas = document.getElementById('canvas');
@@ -125,9 +136,12 @@
     const resultContainer = document.getElementById('result-container');
     const photoResult = document.getElementById('photo-result');
     const downloadLink = document.getElementById('download-link');
+    const uploadBtn = document.getElementById('upload-btn');
+    const statusMsg = document.getElementById('status-msg');
 
     let currentFacingMode = "user";
     let currentStream = null;
+    let currentDataURL = null;
 
     async function initCamera() {
       if (currentStream) {
@@ -162,7 +176,7 @@
           video.srcObject = currentStream;
           await video.play();
         } catch (fallbackErr) {
-          alert("Errore nell'avvio della fotocamera. Verifica i permessi del browser.");
+          alert("Errore nell'avvio della fotocamera.");
         }
       }
     }
@@ -180,7 +194,6 @@
       canvas.height = targetH;
       const ctx = canvas.getContext('2d');
 
-      // Vano geometrico del parabrezza
       const winX = targetW * 0.12;
       const winY = targetH * 0.04;
       const winW = targetW * 0.76;
@@ -215,20 +228,57 @@
       }
       ctx.restore();
 
-      // Disegna la carrozzeria e la targa sopra alla foto
       ctx.drawImage(frame, 0, 0, targetW, targetH);
 
-      const dataURL = canvas.toDataURL('image/jpeg', 0.95);
-      photoResult.src = dataURL;
-      downloadLink.href = dataURL;
+      currentDataURL = canvas.toDataURL('image/jpeg', 0.95);
+      photoResult.src = currentDataURL;
+      downloadLink.href = currentDataURL;
+
+      // Resetta stato pulsante invio
+      uploadBtn.disabled = false;
+      uploadBtn.innerText = "🚀 Invia alla TV";
+      uploadBtn.style.background = "#0070f3";
+      statusMsg.innerText = "";
 
       captureUI.style.display = "none";
       resultContainer.style.display = "flex";
     });
 
+    uploadBtn.addEventListener('click', async () => {
+      if (!currentDataURL) return;
+
+      uploadBtn.disabled = true;
+      uploadBtn.innerText = "⏳ Invio in corso...";
+      statusMsg.innerText = "Caricamento sullo schermo...";
+
+      const formData = new FormData();
+      formData.append("file", currentDataURL);
+      formData.append("upload_preset", UPLOAD_PRESET);
+      formData.append("tags", "laurea_nicola"); // Tag comune per ritrovarle su tv.html
+
+      try {
+        const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, {
+          method: "POST",
+          body: formData
+        });
+        if (res.ok) {
+          uploadBtn.innerText = "✅ Inviata alla TV!";
+          uploadBtn.style.background = "#2e7d32";
+          statusMsg.innerText = "Foto proiettata con successo!";
+        } else {
+          throw new Error("Errore durante l'invio");
+        }
+      } catch (err) {
+        uploadBtn.disabled = false;
+        uploadBtn.innerText = "❌ Riprova invio";
+        uploadBtn.style.background = "#d32f2f";
+        statusMsg.innerText = "Errore di connessione. Riprova!";
+      }
+    });
+
     retakeBtn.addEventListener('click', () => {
       resultContainer.style.display = "none";
-      captureUI.style.display = "flex";
+      captureUI.style.display = "block";
     });
 
     initCamera();
