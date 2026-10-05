@@ -125,6 +125,7 @@
   <script>
     const CLOUD_NAME = "jyu2ze15";
     const UPLOAD_PRESET = "laurea_booth";
+    const REALTIME_TOPIC = "booth-live-8f4b29c1e07d3a";
 
     const video = document.getElementById('video');
     const frame = document.getElementById('frame-overlay');
@@ -234,7 +235,6 @@
       photoResult.src = currentDataURL;
       downloadLink.href = currentDataURL;
 
-      // Resetta stato pulsante invio
       uploadBtn.disabled = false;
       uploadBtn.innerText = "🚀 Invia alla TV";
       uploadBtn.style.background = "#0070f3";
@@ -254,14 +254,31 @@
       const formData = new FormData();
       formData.append("file", currentDataURL);
       formData.append("upload_preset", UPLOAD_PRESET);
-      formData.append("tags", "laurea_nicola"); // Tag comune per ritrovarle su tv.html
+      formData.append("tags", "laurea_nicola");
 
       try {
         const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, {
           method: "POST",
           body: formData
         });
+        
         if (res.ok) {
+          const resData = await res.json();
+          const photoUrl = resData.secure_url;
+
+          // Notifica istantanea alla TV via SSE con cancellazione traccia immediata
+          try {
+            await fetch(`https://ntfy.sh/${REALTIME_TOPIC}`, {
+              method: 'POST',
+              headers: {
+                'X-Cache': 'no'
+              },
+              body: photoUrl
+            });
+          } catch(e) {
+            console.log("Errore realtime, passerà dal ciclo ordinario");
+          }
+
           uploadBtn.innerText = "✅ Inviata alla TV!";
           uploadBtn.style.background = "#2e7d32";
           statusMsg.innerText = "Foto proiettata con successo!";
@@ -278,7 +295,7 @@
 
     retakeBtn.addEventListener('click', () => {
       resultContainer.style.display = "none";
-      captureUI.style.display = "block";
+      captureUI.style.display = "flex";
     });
 
     initCamera();
