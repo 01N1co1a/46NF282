@@ -111,7 +111,7 @@
     const photoResult = document.getElementById('photo-result');
     const downloadLink = document.getElementById('download-link');
 
-    let currentFacingMode = "user"; // Impostato di default frontale (selfie dentro la 500)
+    let currentFacingMode = "user";
     let stream = null;
 
     async function initCamera() {
@@ -119,11 +119,12 @@
         stream.getTracks().forEach(track => track.stop());
       }
       try {
+        // Chiediamo l'apertura grandangolare nativa del sensore senza forzare ritagli digitali stretti
         stream = await navigator.mediaDevices.getUserMedia({
           video: { 
             facingMode: currentFacingMode,
-            width: { ideal: 1080 },
-            height: { ideal: 1440 }
+            width: { ideal: 1920 },
+            height: { ideal: 1080 }
           },
           audio: false
         });
@@ -139,28 +140,48 @@
     });
 
     snapBtn.addEventListener('click', () => {
-      const width = video.videoWidth || 1080;
-      const height = video.videoHeight || 1440;
-      canvas.width = width;
-      canvas.height = height;
+      // 1. Proporzioni e risoluzione bloccate su quelle native della cornice
+      const targetWidth = frame.naturalWidth || 1080;
+      const targetHeight = frame.naturalHeight || 1440;
 
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
       const ctx = canvas.getContext('2d');
 
-      // Specchia l'immagine se fotocamera frontale
+      // 2. Calcolo del ritaglio per mantenere l'aspect-ratio senza deformazioni
+      const vWidth = video.videoWidth;
+      const vHeight = video.videoHeight;
+      const targetRatio = targetWidth / targetHeight;
+      const videoRatio = vWidth / vHeight;
+
+      let sWidth, sHeight, sx, sy;
+
+      if (videoRatio > targetRatio) {
+        sHeight = vHeight;
+        sWidth = vHeight * targetRatio;
+        sx = (vWidth - sWidth) / 2;
+        sy = 0;
+      } else {
+        sWidth = vWidth;
+        sHeight = vWidth / targetRatio;
+        sx = 0;
+        sy = (vHeight - sHeight) / 2;
+      }
+
+      // 3. Disegno del video (specchiato se selfie)
+      ctx.save();
       if (currentFacingMode === "user") {
-        ctx.translate(width, 0);
+        ctx.translate(targetWidth, 0);
         ctx.scale(-1, 1);
       }
-      ctx.drawImage(video, 0, 0, width, height);
+      ctx.drawImage(video, sx, sy, sWidth, sHeight, 0, 0, targetWidth, targetHeight);
+      ctx.restore();
 
-      if (currentFacingMode === "user") {
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
-      }
+      // 4. Disegno della cornice perfettamente allineata
+      ctx.drawImage(frame, 0, 0, targetWidth, targetHeight);
 
-      // Disegna la cornice sopra la foto
-      ctx.drawImage(frame, 0, 0, width, height);
-
-      const dataURL = canvas.toDataURL('image/jpeg', 0.92);
+      // 5. Output finale
+      const dataURL = canvas.toDataURL('image/jpeg', 0.95);
       photoResult.src = dataURL;
       downloadLink.href = dataURL;
 
